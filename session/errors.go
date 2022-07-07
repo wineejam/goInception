@@ -406,9 +406,9 @@ var ErrorsDefault = map[ErrorCode]string{
 	ErrPartitionNotExisted:         "Partition '%-.64s' does not exist",
 	ErrMaxVarcharLength:            "Column length too big for column '%s' (Custom maximum is %d)",
 	ErrMaxColumnCount:              "Table '%s' has too many columns(limit %d,current %d)",
-	ErrMaxBlobCount:              "Table '%s' has too many blob/text fields (limit %d,current %d)",
-	ErrMaxJsonCount:              "Table '%s' has too many json fields(limit %d,current %d)",
-	ErrMaxCharVarcharLength:     "Table '%s' char/varchar has too many length count(limit %d,current %d)",
+	ErrMaxBlobCount:                "Table '%s' has too many blob/text fields (limit %d,current %d)",
+	ErrMaxJsonCount:                "Table '%s' has too many json fields(limit %d,current %d)",
+	ErrMaxCharVarcharLength:        "Table '%s' char/varchar has too many length count(limit %d,current %d)",
 	ER_ERROR_LAST:                  "TheLastError,ByeBye",
 }
 
@@ -586,9 +586,9 @@ var ErrorsChinese = map[ErrorCode]string{
 	ErrPartitionNotExisted:                 "分区 '%-.64s' 不存在",
 	ErrMaxVarcharLength:                    "列'%s'指定长度过长(自定义上限为%d)",
 	ErrMaxColumnCount:                      "表'%s'列数过多(上限:%d,当前:%d)",
-	ErrMaxBlobCount:                      "表'%s' blob/text 字段过多(上限:%d,当前:%d)",
-	ErrMaxJsonCount:                      "表'%s' json 字段过多(上限:%d,当前:%d)",
-	ErrMaxCharVarcharLength:              "表'%s' char/varchar 字段总长度超过限制(上限:%d,当前:%d)",
+	ErrMaxBlobCount:                        "表'%s' blob/text 字段过多(上限:%d,当前:%d)",
+	ErrMaxJsonCount:                        "表'%s' json 字段过多(上限:%d,当前:%d)",
+	ErrMaxCharVarcharLength:                "表'%s' char/varchar 字段总长度超过限制(上限:%d,当前:%d)",
 }
 
 func GetErrorLevel(code ErrorCode) uint8 {

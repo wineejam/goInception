@@ -2677,6 +2677,7 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 				if s.inc.MaxColumnCount > 0 && len(node.Cols) > int(s.inc.MaxColumnCount) {
 					s.appendErrorNo(ErrMaxColumnCount, node.Table.Name.O, s.inc.MaxColumnCount, len(node.Cols))
 				}
+
 				// 20220609 检查text/json/blob 大字段个数
 				blobColCount := 0
 				jsonColCount := 0
@@ -2685,9 +2686,9 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 					if types.IsTypeBlob(field.Tp.Tp) {
 						blobColCount += 1
 					}
-					 // types/etc.go
-					 //  mysql.TypeBlob -> Text
-					 //  mysql.TypeLongBlob -> longtext
+					// types/etc.go
+					//  mysql.TypeBlob -> Text
+					//  mysql.TypeLongBlob -> longtext
 
 					if field.Tp.Tp == mysql.TypeJSON {
 						jsonColCount += 1
@@ -2698,12 +2699,15 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 						log.Debug(field.Tp, " length: ", field.Tp.Flen)
 						charVarcharLength += field.Tp.Flen
 					}
-					
+
 				}
-				log.Debug("charVarcharLength:",charVarcharLength, ", MaxCharVarcharLength:",s.inc.MaxCharVarcharLength)
+				log.Debug("charVarcharLength:", charVarcharLength, ", MaxCharVarcharLength:", s.inc.MaxCharVarcharLength)
 				if charVarcharLength > int(s.inc.MaxCharVarcharLength) {
 					s.appendErrorNo(ErrMaxCharVarcharLength, node.Table.Name.O, s.inc.MaxCharVarcharLength, charVarcharLength)
 				}
+				// if textColCount > int(s.inc.MaxTextCount) {
+				// 	s.appendErrorNo(ErrMaxTextCount, node.Table.Name.O, s.inc.MaxTextCount, textColCount)
+				// }
 				if jsonColCount > int(s.inc.MaxJsonCount) {
 					s.appendErrorNo(ErrMaxJsonCount, node.Table.Name.O, s.inc.MaxJsonCount, jsonColCount)
 				}
@@ -3004,13 +3008,19 @@ func (s *session) checkMustHaveColumns(table *TableInfo) {
 
 		found := false
 		for _, field := range table.Fields {
-			if strings.EqualFold(field.Field, col_name) {
+
+			//20220705 判断NOT NULL
+
+			// log.Debug("field:", field.Null)
+			if strings.EqualFold(field.Field, col_name) && field.Null == "NO" { // 找到必须包含的字段同时设置为NOT NULL
+				log.Debug("found NOT NULL :", "  ,field_name :", field.Field)
 				found = true
 				if col_type != "" && !strings.EqualFold(col_type, GetDataTypeBase(field.Type)) {
 					notFountColumns = append(notFountColumns, col)
 				}
 				break
 			}
+
 		}
 		if !found {
 			notFountColumns = append(notFountColumns, col)
@@ -3187,6 +3197,138 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 		s.appendErrorNo(ER_ALTER_TABLE_ONCE, node.Table.Name.O)
 	}
 
+	//20220706@zw 获取原表信息
+	blobColCount := 0
+	jsonColCount := 0
+	charVarcharLength := 0
+	for _, field := range table.Fields {
+		reg_char := regexp.MustCompile(`.*?char\((\d+)\)`)
+		reg_blob := regexp.MustCompile(`.*?blob$|.*?text$`)
+		reg_json := regexp.MustCompile(`.*?json$`)
+
+		//提取char\varchar的长度
+		result_char := reg_char.FindStringSubmatch(field.Type)
+		if len(result_char) > 0 {
+			char_len, _ := strconv.Atoi(result_char[1])
+			charVarcharLength += char_len
+		}
+		// 提取blob/text的个数
+		blobCount := reg_blob.FindStringSubmatch(field.Type)
+		// log.Debug("blob:", blobCount, " len:", len(blobCount))
+		if len(blobCount) > 0 {
+			log.Debug("blobColCount++")
+			blobColCount += 1
+		}
+		// 提取json的个数
+		jsonCount := reg_json.FindStringSubmatch(field.Type)
+		// log.Debug("json:", jsonCount)
+		if len(jsonCount) > 0 {
+			log.Debug("jsonColCount++")
+			jsonColCount += 1
+		}
+
+		// log.Debug(field.Field, " -> ", field.Tp, " -> ", field.Type)
+	}
+
+	log.Debug("origin table info. blobColCount:", blobColCount, ",jsonColCount:", jsonColCount, ",charVarcharLength:", charVarcharLength)
+
+	// 20220707@zw
+	for _, alter := range node.Specs {
+		switch alter.Tp {
+		case ast.AlterTableAddColumns:
+			addBlobCount := 0
+			addJsonCount := 0
+			addCharLen := 0
+			for _, nc := range alter.NewColumns {
+				if types.IsTypeBlob(nc.Tp.Tp) {
+					addBlobCount += 1
+				}
+				if nc.Tp.Tp == mysql.TypeJSON {
+					addJsonCount += 1
+				}
+				if types.IsTypeChar(nc.Tp.Tp) {
+					// 获取char、varchar字段类型的长度并累加
+					addCharLen += nc.Tp.Flen
+				}
+			}
+
+			blobColCount += addBlobCount
+			jsonColCount += addJsonCount
+			charVarcharLength += addCharLen
+			log.Debug("AlterTableAddColumns -> addBlobCount:", addBlobCount, ",addJsonCount:", addJsonCount, ",addCharLen:", addCharLen)
+
+		case ast.AlterTableModifyColumn:
+			modifyNewCharLen := 0
+			originModifyChar := 0
+			for _, nc := range alter.NewColumns {
+				if types.IsTypeChar(nc.Tp.Tp) {
+					// 获取char、varchar字段类型的长度并累加
+					modifyNewCharLen += nc.Tp.Flen
+				}
+				for _, field := range table.Fields {
+					if nc.Name.Name.String() == field.Field {
+						reg_char := regexp.MustCompile(`.*?char\((\d+)\)`)
+						result_char := reg_char.FindStringSubmatch(field.Type)
+						if len(result_char) > 0 {
+							char_len, _ := strconv.Atoi(result_char[1])
+							originModifyChar += char_len
+						}
+						break
+					}
+				}
+			}
+
+			charVarcharLength += modifyNewCharLen
+			// modify 需要减掉原字段长度
+			charVarcharLength -= originModifyChar
+			log.Debug("AlterTableModifyColumn -> modifyNewCharLen:", modifyNewCharLen, " -> originModifyChar:", originModifyChar)
+
+		case ast.AlterTableChangeColumn:
+			ChangeNewCharLen := 0
+			originChangeChar := 0
+			for _, nc := range alter.NewColumns {
+				if types.IsTypeChar(nc.Tp.Tp) {
+					// 获取char、varchar字段类型的长度并累加
+					ChangeNewCharLen += nc.Tp.Flen
+				}
+				for _, field := range table.Fields {
+					if nc.Name.Name.String() == field.Field {
+						reg_char := regexp.MustCompile(`.*?char\((\d+)\)`)
+						result_char := reg_char.FindStringSubmatch(field.Type)
+						if len(result_char) > 0 {
+							char_len, _ := strconv.Atoi(result_char[1])
+							originChangeChar += char_len
+						}
+						break
+					}
+				}
+			}
+
+			charVarcharLength += ChangeNewCharLen
+			// change 需要减掉原字段长度
+			charVarcharLength -= originChangeChar
+			log.Debug("AlterTableModifyColumn -> modifyNewCharLen:", ChangeNewCharLen, " -> originChangeChar:", originChangeChar)
+
+		}
+
+	}
+
+	// 20220707@zw判断是否超出限制
+	log.Debug("finally. blobColCount:", blobColCount, ",jsonColCount:", jsonColCount, ",charVarcharLength:", charVarcharLength)
+
+	log.Debug("charVarcharLength:", charVarcharLength, ", MaxCharVarcharLength:", s.inc.MaxCharVarcharLength)
+	if charVarcharLength > int(s.inc.MaxCharVarcharLength) {
+		s.appendErrorNo(ErrMaxCharVarcharLength, node.Table.Name.O, s.inc.MaxCharVarcharLength, charVarcharLength)
+	}
+	log.Debug("jsonColCount:", jsonColCount, ", MaxJsonCount:", s.inc.MaxJsonCount)
+	if jsonColCount > int(s.inc.MaxJsonCount) {
+		s.appendErrorNo(ErrMaxJsonCount, node.Table.Name.O, s.inc.MaxJsonCount, jsonColCount)
+	}
+	log.Debug("blobColCount:", blobColCount, ", MaxBlobCount:", s.inc.MaxBlobCount)
+	if blobColCount > int(s.inc.MaxBlobCount) {
+		s.appendErrorNo(ErrMaxBlobCount, node.Table.Name.O, s.inc.MaxBlobCount, blobColCount)
+	}
+
 	// for _, sepc := range node.Specs {
 	// 	if sepc.Options != nil {
 	// 		hasComment := false
@@ -3294,6 +3436,7 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
 		return
 	}
+
 	for i, alter := range node.Specs {
 		switch alter.Tp {
 		case ast.AlterTableOption:
@@ -3304,7 +3447,7 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 			}
 
 		case ast.AlterTableAddColumns:
-			s.checkAddColumn(table, alter)
+			s.checkAddColumn(table, alter, blobColCount, jsonColCount, charVarcharLength)
 		case ast.AlterTableDropColumn:
 			s.checkDropColumn(table, alter)
 
@@ -4613,7 +4756,8 @@ func (s *session) checkDropPrimaryKey(t *TableInfo, c *ast.AlterTableSpec) {
 	s.checkAlterTableDropIndex(t, "PRIMARY")
 }
 
-func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
+func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec, blobC int, jsonC int, charC int) {
+	log.Debug("checkAddColumn")
 
 	for _, nc := range c.NewColumns {
 		found := false

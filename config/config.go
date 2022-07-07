@@ -681,9 +681,9 @@ type IncLevel struct {
 	ErrIncorrectDateTimeValue       int8 `toml:"er_incorrect_datetime_value"`
 	ErrMaxVarcharLength             int8 `toml:"er_max_varchar_length"`
 	ErrMaxColumnCount               int8 `toml:"er_max_column_count"`
-	ErrMaxBlobCount               int8 `toml:"er_max_blob_count"`
-	ErrMaxJsonCount               int8 `toml:"er_max_json_count"`
-	ErrMaxCharVarcharLength       int8 `toml:"er_max_char_varcher_length"`
+	ErrMaxBlobCount                 int8 `toml:"er_max_blob_count"`
+	ErrMaxJsonCount                 int8 `toml:"er_max_json_count"`
+	ErrMaxCharVarcharLength         int8 `toml:"er_max_char_varcher_length"`
 }
 
 var defaultConf = Config{
@@ -903,9 +903,9 @@ var defaultConf = Config{
 		ErrIncorrectDateTimeValue:       2,
 		ErrMaxVarcharLength:             2,
 		ErrMaxColumnCount:               1,
-		ErrMaxBlobCount:               1,
-		ErrMaxJsonCount:               1,
-		ErrMaxCharVarcharLength:       1,
+		ErrMaxBlobCount:                 1,
+		ErrMaxJsonCount:                 1,
+		ErrMaxCharVarcharLength:         1,
 	},
 }
 
