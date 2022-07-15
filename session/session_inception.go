@@ -848,8 +848,8 @@ func (s *session) checkSqlIsDDL(record *Record) bool {
 
 		*ast.CreateViewStmt,
 
-		// *ast.CreateDatabaseStmt,
-		// *ast.DropDatabaseStmt,
+	// *ast.CreateDatabaseStmt,
+	// *ast.DropDatabaseStmt,
 
 		*ast.CreateIndexStmt,
 		*ast.DropIndexStmt:
@@ -4472,6 +4472,15 @@ func (s *session) mysqlCheckField(t *TableInfo, field *ast.ColumnDef, alterTable
 		s.appendErrorNo(ER_TEXT_NOT_NULLABLE_ERROR, field.Name.Name, tableName)
 	}
 
+	if isPrimary {
+		//主键必须int或bigint 同时 unsigned 20220714
+		// int && unsigned  or bigint && unsigned
+		//log.Debug("filed:",field.Tp.Tp,"filed flag:",field.Tp.Flag)
+		if !(field.Tp.Tp == mysql.TypeLong && mysql.HasUnsignedFlag(field.Tp.Flag) || field.Tp.Tp == mysql.TypeLonglong && mysql.HasUnsignedFlag(field.Tp.Flag)) {
+			s.appendErrorNo(ER_PK_COLS_NOT_INT, field.Name.Name, tableName, field.Name.Name)
+		}
+	}
+
 	if autoIncrement {
 		if !mysql.HasUnsignedFlag(field.Tp.Flag) {
 			s.appendErrorNo(ER_AUTOINC_UNSIGNED, tableName)
@@ -4519,7 +4528,7 @@ func (s *session) mysqlCheckField(t *TableInfo, field *ast.ColumnDef, alterTable
 
 func (s *session) checkIndexAttr(tp ast.ConstraintType, name string,
 	keys []*ast.IndexColName, table *TableInfo) {
-
+	log.Debug("checkIndexAttr")
 	if tp == ast.ConstraintPrimaryKey {
 
 		if s.inc.MaxPrimaryKeyParts > 0 && len(keys) > int(s.inc.MaxPrimaryKeyParts) {
@@ -4546,13 +4555,13 @@ func (s *session) checkIndexAttr(tp ast.ConstraintType, name string,
 		// 	}
 		// }
 
-		if name != strings.ToUpper(name) {
-			s.appendErrorNo(ErrIdentifierUpper, name)
-		}
+		// if name != strings.ToUpper(name) {
+		// 	s.appendErrorNo(ErrIdentifierUpper, name)
+		// }
 
-		if name != strings.ToLower(name) {
-			s.appendErrorNo(ErrIdentifierLower, name)
-		}
+		// if name != strings.ToLower(name) {
+		// 	s.appendErrorNo(ErrIdentifierLower, name)
+		// }
 
 		if isIncorrectName(name) {
 			s.appendErrorNo(ER_WRONG_NAME_FOR_INDEX, name, table.Name)
