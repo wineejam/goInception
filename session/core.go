@@ -371,7 +371,11 @@ func (s *session) audit(ctx context.Context, sql string) (err error) {
 				} else if s.opt != nil && s.opt.split {
 					result, err = s.splitCommand(ctx, stmtNode, currentSql)
 				} else {
-					result, err = s.processCommand(ctx, stmtNode, currentSql)
+					// 220801
+					insertItems := map[string]int{}
+					updateItems := map[string]int{}
+					deleteItems := map[string]int{}
+					result, err = s.processCommand(ctx, stmtNode, currentSql,insertItems,updateItems,deleteItems)
 				}
 				if err != nil {
 					return err

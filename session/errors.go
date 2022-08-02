@@ -80,6 +80,7 @@ const (
 	ER_TOO_LONG_IDENT
 	ER_UDPATE_TOO_MUCH_ROWS
 	ER_INSERT_TOO_MUCH_ROWS
+	ER_DML_TOO_MUCH_ITEMS
 	ER_CHANGE_TOO_MUCH_ROWS
 	ER_WRONG_NAME_FOR_INDEX
 	ER_TOO_MANY_KEYS
@@ -266,6 +267,7 @@ var ErrorsDefault = map[ErrorCode]string{
 	ER_TOO_LONG_IDENT:                      "Identifier name '%s' is too long.",
 	ER_UDPATE_TOO_MUCH_ROWS:                "Update(%d rows) more than %d rows.",
 	ER_INSERT_TOO_MUCH_ROWS:                "Insert(%d rows) more than %d rows.",
+	ER_DML_TOO_MUCH_ITEMS:                  "Insert/Update/Delete(%d rows) more than %d items.",
 	ER_CHANGE_TOO_MUCH_ROWS:                "%s(%d rows) more than %d rows.",
 	ER_WRONG_NAME_FOR_INDEX:                "Incorrect index name '%s' in table '%s'.",
 	ER_TOO_MANY_KEYS:                       "Too many keys specified in table '%s', max %d keys allowed.",
@@ -452,7 +454,8 @@ var ErrorsChinese = map[ErrorCode]string{
 	ER_TOO_MANY_KEY_PARTS:               "索引 '%s'指定了太多的字段(表 '%s'), 最多允许 %d 个字段.",
 	ER_TOO_LONG_IDENT:                   "名称 '%s' 过长.",
 	ER_UDPATE_TOO_MUCH_ROWS:             "预计一次更新(%d行)超过 %d 行.",
-	ER_INSERT_TOO_MUCH_ROWS:             "一次新增(%d行)超过 %d 行.",
+	ER_INSERT_TOO_MUCH_ROWS:             "单条insert values过多.(%d)超过 %d .",
+	ER_DML_TOO_MUCH_ITEMS:                "(表 '%s')insert/update/delete次数过多.请合并对应语句",
 	ER_CHANGE_TOO_MUCH_ROWS:             "预计影响行数(%d行)超过 %d 行.",
 	ER_WRONG_NAME_FOR_INDEX:             "索引 '%s' 名称不正确(表 '%s').",
 	ER_TOO_MANY_KEYS:                    "表 '%s' 指定了太多索引, 最多允许 %d 个.",
@@ -612,6 +615,7 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ER_TEMP_TABLE_TMP_PREFIX,
 		ER_TABLE_PREFIX,
 		ER_INSERT_TOO_MUCH_ROWS,
+		ER_DML_TOO_MUCH_ITEMS,
 		ER_INVALID_DATA_TYPE,
 		ER_INVALID_IDENT,
 		ER_MUST_HAVE_COLUMNS,
@@ -847,6 +851,8 @@ func (e ErrorCode) String() string {
 		return "er_change_too_much_rows"
 	case ER_INSERT_TOO_MUCH_ROWS:
 		return "er_insert_too_much_rows"
+	case ER_DML_TOO_MUCH_ITEMS:
+		return "er_dml_too_much_items"
 	case ER_WRONG_NAME_FOR_INDEX:
 		return "er_wrong_name_for_index"
 	case ER_TOO_MANY_KEYS:

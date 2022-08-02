@@ -132,7 +132,7 @@ func (s *session) ExecuteInc(ctx context.Context, sql string) (recordSets []sqle
 
 func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqlexec.RecordSet, err error) {
 	sqlList := strings.Split(sql, "\n")
-
+	log.Debug("executeInc")
 	// tidb执行的SQL关闭general日志
 	logging := s.inc.GeneralLog
 
@@ -183,6 +183,11 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 	var buf []string
 
 	quotaIsDouble := true
+	//20220801 限制insert最大条数
+	insertItems := map[string]int{}
+	updateItems := map[string]int{}
+	deleteItems := map[string]int{}
+
 	for i, sql_line := range sqlList {
 
 		// 100行解析一次
@@ -378,8 +383,8 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 						if err := executor.ResetContextOfStmt(s, stmtNode); err != nil {
 							return nil, errors.Trace(err)
 						}
-
-						return s.processCommand(ctx, stmtNode, currentSql)
+						//log.Debug("111")
+						return s.processCommand(ctx, stmtNode, currentSql, insertItems, updateItems, deleteItems)
 					}
 
 					var result []sqlexec.RecordSet
@@ -392,7 +397,9 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 					case s.opt != nil && s.opt.split:
 						result, err = s.splitCommand(ctx, stmtNode, currentSql)
 					default:
-						result, err = s.processCommand(ctx, stmtNode, currentSql)
+						//20220801
+						result, err = s.processCommand(ctx, stmtNode, currentSql, insertItems, updateItems, deleteItems)
+						//log.Debug("processCommand result:", result, ",err:", err)
 					}
 					if err != nil {
 						return nil, err
@@ -552,17 +559,19 @@ func (s *session) needDataSource(stmtNode ast.StmtNode) bool {
 }
 
 func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
-	currentSql string) ([]sqlexec.RecordSet, error) {
+	currentSql string, insertItems, updateItems, deleteItems map[string]int) ([]sqlexec.RecordSet, error) {
 	log.Debug("processCommand")
 
 	s.checkAmbiguous = true
 	switch node := stmtNode.(type) {
 	case *ast.InsertStmt:
-		s.checkInsert(node, currentSql)
+		//20220801
+		//log.Debug("processCommand -- insertItems:", insertItems)
+		s.checkInsert(node, currentSql, insertItems)
 	case *ast.DeleteStmt:
-		s.checkDelete(node, currentSql)
+		s.checkDelete(node, currentSql, deleteItems)
 	case *ast.UpdateStmt:
-		s.checkUpdate(node, currentSql)
+		s.checkUpdate(node, currentSql, updateItems)
 
 	case *ast.UnionStmt:
 		for _, sel := range node.SelectList.Selects {
@@ -5097,10 +5106,12 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 
 			if tp == ast.ConstraintPrimaryKey {
 				fieldType := GetDataTypeBase(strings.ToLower(foundField.Type))
+				log.Debug("filedTypeBase:", fieldType)
 
 				// if !strings.Contains(strings.ToLower(foundField.Type), "int") {
 				if fieldType != "mediumint" && fieldType != "int" &&
 					fieldType != "bigint" {
+					// && !mysql.HasUnsignedFlag(fieldType.Flag)
 					s.appendErrorNo(ER_PK_COLS_NOT_INT, foundField.Field, t.Schema, t.Name)
 				}
 
@@ -5412,7 +5423,7 @@ func (s *session) checkDBExists(db string, reportNotExists bool) bool {
 	return true
 }
 
-func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
+func (s *session) checkInsert(node *ast.InsertStmt, sql string, insertItems map[string]int) {
 
 	log.Debug("checkInsert")
 
@@ -5496,14 +5507,29 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 	// log.Errorf("fieldCount: %v", fieldCount)
 	// log.Errorf("fields len: %#v", len(fields))
 	// log.Errorf("fields: %#v", fields)
+	// node.Lists => values的个数
 	if len(node.Lists) > 0 {
-		if s.inc.MaxInsertRows > 0 && len(node.Lists) > int(s.inc.MaxInsertRows) {
+		// 20220801  增加单表限制最大insert条目
+		tmpTableName := t.Name.O
+		if find := strings.Contains(sql, tmpTableName); find {
+			insertItems[tmpTableName] += 1
+		}
+		if int(s.inc.MaxDmlItems) > 0 && insertItems[tmpTableName] > int(s.inc.MaxDmlItems) {
+			log.Debug("insert items exceed the limit.table:", tmpTableName)
+			//s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName, insertItems[tmpTableName], s.inc.MaxDmlItems)
+			s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName)
+		}
+
+		//log.Debug("table_name:", tmpTableName, ",checkInsert insertItems:", insertItems, ",sql:", sql)
+
+		if int(s.inc.MaxInsertRows) > 0 && len(node.Lists) > int(s.inc.MaxInsertRows) {
 			s.appendErrorNo(ER_INSERT_TOO_MUCH_ROWS,
 				len(node.Lists), s.inc.MaxInsertRows)
 		}
 
 		// 审核列数是否匹配,是否为not null字段指定了NULL值
 		for i, list := range node.Lists {
+			//log.Debug("node.Lists:,i:",i,",list:",list)
 			if len(list) == 0 {
 				s.appendErrorNo(ER_WITH_INSERT_VALUES)
 				continue
@@ -7103,7 +7129,7 @@ func (s *session) anlyzeExplain(rows []ExplainInfo) {
 	}
 }
 
-func (s *session) checkUpdate(node *ast.UpdateStmt, sql string) {
+func (s *session) checkUpdate(node *ast.UpdateStmt, sql string, updateItems map[string]int) {
 	log.Debug("checkUpdate")
 
 	// 从set列表读取要更新的表
@@ -7187,6 +7213,19 @@ func (s *session) checkUpdate(node *ast.UpdateStmt, sql string) {
 		// if i == len(tableList) - 1 && s.myRecord.TableInfo == nil {
 		// 	s.myRecord.TableInfo = t
 		// }
+
+		//log.Debug("asname:", tblSource.AsName.L, "tbl:", tblName.Name.L, ",origin:", originTable)
+		// 20220801 增加单表限制最大update条目
+		tmpTableName := tblName.Name.L
+		if find := strings.Contains(sql, tmpTableName); find {
+			updateItems[tmpTableName] += 1
+		}
+		if int(s.inc.MaxDmlItems) > 0 && updateItems[tmpTableName] > int(s.inc.MaxDmlItems) {
+			log.Debug("update items exceed the limit.table:", tmpTableName)
+			//s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName, updateItems[tmpTableName], s.inc.MaxDmlItems)
+			s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName)
+		}
+		log.Debug("table_name:", tmpTableName, ",updateItems:", updateItems, ",sql:", sql)
 	}
 
 	if !catchError {
@@ -7283,6 +7322,7 @@ func (s *session) checkUpdate(node *ast.UpdateStmt, sql string) {
 	}
 
 	// s.saveFingerprint(sqlId)
+
 }
 
 // checkColumnTypeImplicitConversion 列类型隐式转换检查
@@ -7527,7 +7567,7 @@ func (s *session) checkAggregateFuncItem(f *ast.AggregateFuncExpr, tables []*Tab
 	return false
 }
 
-func (s *session) checkDelete(node *ast.DeleteStmt, sql string) {
+func (s *session) checkDelete(node *ast.DeleteStmt, sql string, deleteItems map[string]int) {
 	log.Debug("checkDelete")
 
 	// sqlId, ok := s.checkFingerprint(sql)
@@ -7558,7 +7598,7 @@ func (s *session) checkDelete(node *ast.DeleteStmt, sql string) {
 	// }
 
 	tableInfoList, hasNew := s.getTableList(tableList)
-
+	//log.Debug("node.Tables", node.Tables, "tableInfoList", tableInfoList)
 	if node.Tables == nil {
 		if s.myRecord.TableInfo == nil && len(tableInfoList) > 0 {
 			s.myRecord.TableInfo = tableInfoList[0]
@@ -7590,8 +7630,23 @@ func (s *session) checkDelete(node *ast.DeleteStmt, sql string) {
 				s.appendErrorNo(ER_TABLE_NOT_EXISTED_ERROR,
 					fmt.Sprintf("%s.%s", db, name.Name))
 			}
+
 		}
 	}
+
+	log.Debug("tablname:", s.myRecord.TableInfo.Name)
+	// 20220801 增加单表限制最大delete条目
+	//t := getSingleTableName(node.Table)
+	tmpTableName := s.myRecord.TableInfo.Name
+	if find := strings.Contains(sql, tmpTableName); find {
+		deleteItems[tmpTableName] += 1
+	}
+	if int(s.inc.MaxDmlItems) > 0 && deleteItems[tmpTableName] > int(s.inc.MaxDmlItems) {
+		log.Debug("delete items exceed the limit.table:", tmpTableName)
+		//s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName, deleteItems[tmpTableName], s.inc.MaxDmlItems)
+		s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName)
+	}
+	log.Debug("table_name:", tmpTableName, ",deleteItems:", deleteItems, ",sql:", sql)
 
 	if node.TableRefs.TableRefs.On != nil {
 		s.checkItem(node.TableRefs.TableRefs.On.Expr, tableInfoList)
@@ -7628,6 +7683,7 @@ func (s *session) checkDelete(node *ast.DeleteStmt, sql string) {
 	}
 
 	// s.saveFingerprint(sqlId)
+
 }
 
 func (s *session) queryTableFromDB(db string, tableName string, reportNotExists bool) []FieldInfo {
