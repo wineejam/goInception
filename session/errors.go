@@ -199,6 +199,7 @@ const (
 	ErCantChangeColumnPosition
 	ErCantChangeColumn
 	ER_DATETIME_DEFAULT
+	ER_DATETIME_TIMESTAMP_NOTNULL
 	ER_TOO_MUCH_AUTO_DATETIME_COLS
 	ErrFloatDoubleToDecimal
 	ErrIdentifierUpper
@@ -387,7 +388,8 @@ var ErrorsDefault = map[ErrorCode]string{
 	ErCantChangeColumn:                     "Not supported statement of change column('%s').",
 	// ErrMixOfGroupFuncAndFields:             "Mixing of GROUP columns (MIN(),MAX(),COUNT(),...) with no GROUP columns is illegal if there is no GROUP BY clause",
 	//ER_NULL_NAME_FOR_INDEX:                 "Index name cannot be null in table '%s'.",
-	ER_DATETIME_DEFAULT:            "Set default value for DATETIME column '%s'.",
+	ER_DATETIME_DEFAULT:                      "Set default value for DATETIME column '%s'.",
+	ER_DATETIME_TIMESTAMP_NOTNULL:            "Must Not null for DATETIME/TIMESTAMP column '%s'.",
 	ER_TOO_MUCH_AUTO_DATETIME_COLS: "Incorrect table definition; there can be only one DATETIME column with CURRENT_TIMESTAMP in DEFAULT or ON UPDATE clause",
 	ErrFloatDoubleToDecimal:        "Set column '%s' to DECIMAL type.",
 	ErrIdentifierUpper:             "Identifier '%s' must be capitalized.",
@@ -554,7 +556,7 @@ var ErrorsChinese = map[ErrorCode]string{
 	ER_CANT_SET_COLLATION:                  "禁止指定排序规则: '%s'",
 	ER_CANT_SET_ENGINE:                     "禁止指定存储引擎:'%s'",
 	ER_MUST_AT_LEAST_ONE_COLUMN:            "表至少需要有一个列.",
-	ER_MUST_HAVE_COLUMNS:                   "表必须包含以下列(必须为NOT NULL): '%s'.",
+	ER_MUST_HAVE_COLUMNS:                   "表必须包含以下列: '%s'.",
 	ErrColumnsMustHaveIndex:                "列: '%s' 必须建索引.",
 	ErrColumnsMustHaveIndexTypeErr:         "列: '%s' 类型必须为 '%s',当前为 '%s'",
 	ER_PRIMARY_CANT_HAVE_NULL:              "主键的所有列必须为NOT NULL,如需要NULL列,请改用唯一索引",
@@ -572,6 +574,7 @@ var ErrorsChinese = map[ErrorCode]string{
 	ErCantChangeColumnPosition:             "不允许改变列顺序(列'%s').",
 	ErCantChangeColumn:                     "不允许change column语法(列'%s').",
 	ER_DATETIME_DEFAULT:                    "请设置 datetime 列 '%s' 的默认值.",
+	ER_DATETIME_TIMESTAMP_NOTNULL:          "列 '%s' (datetime/timestamp)不允许设置为NULL.",
 	ER_TOO_MUCH_AUTO_DATETIME_COLS:         "表定义不正确,只能有一个 datetime 字段,在 DEFAULT 或 ON UPDATE指定CURRENT_TIMESTAMP.",
 	ErrFloatDoubleToDecimal:                "列 '%s' 建议设置为 decimal 类型.",
 	ErrIdentifierUpper:                     "标识符 '%s' 必须大写.",
@@ -654,6 +657,7 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ErrMariaDBRollbackWarn,
 		ErrTableCollationNotSupport,
 		ER_DATETIME_DEFAULT,
+		ER_DATETIME_TIMESTAMP_NOTNULL,
 		ErrWrongAndExpr,
 		ErrImplicitTypeConversion,
 		ErrUseValueExpr,

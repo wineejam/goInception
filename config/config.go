@@ -251,6 +251,8 @@ type Inc struct {
 	EnableZeroDate       bool `toml:"enable_zero_date" json:"enable_zero_date"`
 	CheckDatetimeDefault bool `toml:"check_datetime_default" json:"check_datetime_default"`
 	CheckDatetimeCount   bool `toml:"check_datetime_count" json:"check_datetime_count"`
+	//20220802 检查datetime/timestamp NOT NULL
+	CheckDatetimeTimestampNotnull bool `toml:"check_datetime_timestamp_notnull" json:"check_datetime_timestamp_notnull"`
 
 	// 将 float/double 转成 decimal, 默认为 false
 	CheckFloatDouble bool `toml:"check_float_double" json:"check_float_double"`
@@ -632,6 +634,7 @@ type IncLevel struct {
 	ER_CHARSET_ON_COLUMN      int8 `toml:"er_charset_on_column"`
 	ER_COLUMN_HAVE_NO_COMMENT int8 `toml:"er_column_have_no_comment"`
 	ER_DATETIME_DEFAULT       int8 `toml:"er_datetime_default"`
+	ER_DATETIME_TIMESTAMP_NOTNULL       int8 `toml:"er_datetime_timestamp_notnull"`
 	ErrFloatDoubleToDecimal   int8 `toml:"er_float_double_to_decimal"`
 	ER_FOREIGN_KEY            int8 `toml:"er_foreign_key"`
 	ER_IDENT_USE_KEYWORD      int8 `toml:"er_ident_use_keyword"`
@@ -856,6 +859,7 @@ var defaultConf = Config{
 		ER_CHARSET_ON_COLUMN:            1,
 		ER_COLUMN_HAVE_NO_COMMENT:       1,
 		ER_DATETIME_DEFAULT:             1,
+		ER_DATETIME_TIMESTAMP_NOTNULL:   1,
 		ErrFloatDoubleToDecimal:         2,
 		ER_FOREIGN_KEY:                  2,
 		ER_IDENT_USE_KEYWORD:            1,

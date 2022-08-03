@@ -2705,8 +2705,23 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 					// 统计 char varchar的总长度
 					if types.IsTypeChar(field.Tp.Tp) {
 						// 获取char、varchar字段类型的长度并累加
-						log.Debug(field.Tp, " length: ", field.Tp.Flen)
+						//log.Debug(field.Tp, " length: ", field.Tp.Flen)
 						charVarcharLength += field.Tp.Flen
+					}
+
+					// 20220802 检查 datetime、timestamp NOT NULL
+					if field.Tp.Tp == mysql.TypeDatetime || field.Tp.Tp == mysql.TypeTimestamp {
+						log.Debug("field.Tp:", field.Tp, ",filed name:", field.Name.String())
+						hasNotNullFlag := false
+						for _, op := range field.Options {
+							switch op.Tp {
+							case ast.ColumnOptionNotNull:
+								hasNotNullFlag = true
+							}
+						}
+						if s.inc.CheckDatetimeTimestampNotnull && !hasNotNullFlag {
+							s.appendErrorNo(ER_DATETIME_TIMESTAMP_NOTNULL, field.Name.String())
+						}
 					}
 
 				}
@@ -2997,6 +3012,7 @@ func (s *session) checkTableOptions(options []*ast.TableOption, table string, is
 
 // checkMustHaveColumns 检查表是否包含有必须的字段
 func (s *session) checkMustHaveColumns(table *TableInfo) {
+	log.Debug("checkMustHaveColumns")
 	columns := strings.Split(s.inc.MustHaveColumns, ",")
 	if len(columns) == 0 {
 		return
@@ -3206,10 +3222,13 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 		s.appendErrorNo(ER_ALTER_TABLE_ONCE, node.Table.Name.O)
 	}
 
-	//20220706@zw 获取原表信息
+	//20220706@ 获取原表信息
 	blobColCount := 0
 	jsonColCount := 0
 	charVarcharLength := 0
+	originTableHasMustCol := false
+	//var notFountColumns []string
+	found := false
 	for _, field := range table.Fields {
 		reg_char := regexp.MustCompile(`.*?char\((\d+)\)`)
 		reg_blob := regexp.MustCompile(`.*?blob$|.*?text$`)
@@ -3236,18 +3255,47 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 			jsonColCount += 1
 		}
 
-		// log.Debug(field.Field, " -> ", field.Tp, " -> ", field.Type)
+		log.Debug("originTableField:", field.Field, " -> ", field.Tp, " -> ", field.Type)
+
+		// 20220801找原表信息中是否已经包含必备字段
+		columns := strings.Split(s.inc.MustHaveColumns, ",")
+		for _, must_col := range columns {
+			col := strings.TrimSpace(must_col)
+			col_name := col
+			if strings.Contains(col, " ") {
+				column_name_type := strings.Fields(col)
+				if len(column_name_type) > 1 {
+					col_name = column_name_type[0]
+				}
+			}
+			// 找到必须包含的字段同时设置为NOT NULL
+			if strings.EqualFold(field.Field, col_name) && field.Null == "NO" {
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+		//log.Debug("notFountColumns:", notFountColumns)
 	}
+
+	if found {
+		originTableHasMustCol = true
+	}
+	log.Debug("originTableHasMustCol:", originTableHasMustCol)
 
 	log.Debug("origin table info. blobColCount:", blobColCount, ",jsonColCount:", jsonColCount, ",charVarcharLength:", charVarcharLength)
 
-	// 20220707@zw
+	// 20220707 获取char、varchar字段类型的长度并累加
 	for _, alter := range node.Specs {
 		switch alter.Tp {
 		case ast.AlterTableAddColumns:
 			addBlobCount := 0
 			addJsonCount := 0
 			addCharLen := 0
+			found := false
+			isMustCol := false //操作的字段是否为必备字段
 			for _, nc := range alter.NewColumns {
 				if types.IsTypeBlob(nc.Tp.Tp) {
 					addBlobCount += 1
@@ -3259,6 +3307,61 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 					// 获取char、varchar字段类型的长度并累加
 					addCharLen += nc.Tp.Flen
 				}
+
+				// 20220802 检查 datetime、timestamp NOT NULL
+				if nc.Tp.Tp == mysql.TypeDatetime || nc.Tp.Tp == mysql.TypeTimestamp {
+					log.Debug("AlterTableAddColumns field.Tp:", nc.Tp, ",filed name:", nc.Name.String())
+					hasNotNullFlag := false
+					for _, op := range nc.Options {
+						switch op.Tp {
+						case ast.ColumnOptionNotNull:
+							hasNotNullFlag = true
+						}
+					}
+
+					//20220802 检查alter table 必备列名
+					// 配置中开启了必备列表且原表没有必备列名
+					if s.inc.MustHaveColumns != "" && !originTableHasMustCol {
+						log.Debug("alter table add column checkMustHaveColumns")
+
+						var notFountColumns []string
+						columns := strings.Split(s.inc.MustHaveColumns, ",")
+						for _, must_col := range columns {
+							col := strings.TrimSpace(must_col)
+							col_name := col
+							if strings.Contains(col, " ") {
+								column_name_type := strings.Fields(col)
+								if len(column_name_type) > 1 {
+									col_name = column_name_type[0]
+								}
+							}
+							// 找到必须包含的字段
+							if strings.EqualFold(nc.Name.String(), col_name) {
+								isMustCol = true
+								if hasNotNullFlag {
+									log.Debug("add column found NOT NULL field_name :", col_name)
+									found = true
+									break
+								}
+								if found {
+									break
+								} else {
+									notFountColumns = append(notFountColumns, col)
+								}
+							}
+						}
+						log.Debug("add column isMustCol:", isMustCol)
+						if !found && isMustCol {
+							s.appendErrorNo(ER_MUST_HAVE_COLUMNS, strings.Join(notFountColumns, ","))
+						}
+					}
+
+					// 20220802 检查 datetime、timestamp NOT NULL
+					if s.inc.CheckDatetimeTimestampNotnull && !hasNotNullFlag {
+						s.appendErrorNo(ER_DATETIME_TIMESTAMP_NOTNULL, nc.Name.String())
+					}
+				}
+
 			}
 
 			blobColCount += addBlobCount
@@ -3270,10 +3373,26 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 			modifyNewCharLen := 0
 			originModifyChar := 0
 			for _, nc := range alter.NewColumns {
+				// 20220802 检查 datetime、timestamp NOT NULL
+				log.Debug("AlterTableModifyColumn field.Tp:", nc.Tp, ",filed name:", nc.Name.String())
+				if nc.Tp.Tp == mysql.TypeDatetime || nc.Tp.Tp == mysql.TypeTimestamp {
+					hasNotNullFlag := false
+					for _, op := range nc.Options {
+						switch op.Tp {
+						case ast.ColumnOptionNotNull:
+							hasNotNullFlag = true
+						}
+					}
+					if s.inc.CheckDatetimeTimestampNotnull && !hasNotNullFlag {
+						s.appendErrorNo(ER_DATETIME_TIMESTAMP_NOTNULL, nc.Name.String())
+					}
+				}
+
 				if types.IsTypeChar(nc.Tp.Tp) {
 					// 获取char、varchar字段类型的长度并累加
 					modifyNewCharLen += nc.Tp.Flen
 				}
+				// 获取原表字段char varchar总长度
 				for _, field := range table.Fields {
 					if nc.Name.Name.String() == field.Field {
 						reg_char := regexp.MustCompile(`.*?char\((\d+)\)`)
@@ -3285,6 +3404,7 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 						break
 					}
 				}
+
 			}
 
 			charVarcharLength += modifyNewCharLen
@@ -3295,11 +3415,67 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 		case ast.AlterTableChangeColumn:
 			ChangeNewCharLen := 0
 			originChangeChar := 0
+			found := false
+			isMustCol := false //操作的字段是否为必备字段
 			for _, nc := range alter.NewColumns {
+				// 20220802 检查 datetime、timestamp NOT NULL
+				log.Debug("AlterTableChangeColumn field.Tp:", nc.Tp, ",filed name:", nc.Name.String())
+				if nc.Tp.Tp == mysql.TypeDatetime || nc.Tp.Tp == mysql.TypeTimestamp {
+					hasNotNullFlag := false
+					for _, op := range nc.Options {
+						switch op.Tp {
+						case ast.ColumnOptionNotNull:
+							hasNotNullFlag = true
+						}
+					}
+
+					//20220802 检查alter table 必备列名
+					// 配置中开启了必备列表且原表没有必备列名
+					if s.inc.MustHaveColumns != "" && !originTableHasMustCol {
+						log.Debug("alter table change column checkMustHaveColumns")
+
+						var notFountColumns []string
+						columns := strings.Split(s.inc.MustHaveColumns, ",")
+						for _, must_col := range columns {
+							col := strings.TrimSpace(must_col)
+							col_name := col
+							if strings.Contains(col, " ") {
+								column_name_type := strings.Fields(col)
+								if len(column_name_type) > 1 {
+									col_name = column_name_type[0]
+								}
+							}
+							// 找到必须包含的字段
+							if strings.EqualFold(nc.Name.String(), col_name) {
+								isMustCol = true
+								if hasNotNullFlag {
+									log.Debug("change column found NOT NULL field_name :", col_name)
+									found = true
+									break
+								}
+								if found {
+									break
+								} else {
+									notFountColumns = append(notFountColumns, col)
+								}
+							}
+						}
+						log.Debug("change column isMustCol:", isMustCol)
+						if !found && isMustCol {
+							s.appendErrorNo(ER_MUST_HAVE_COLUMNS, strings.Join(notFountColumns, ","))
+						}
+					}
+
+					if s.inc.CheckDatetimeTimestampNotnull && !hasNotNullFlag {
+						s.appendErrorNo(ER_DATETIME_TIMESTAMP_NOTNULL, nc.Name.String())
+					}
+				}
+
 				if types.IsTypeChar(nc.Tp.Tp) {
 					// 获取char、varchar字段类型的长度并累加
 					ChangeNewCharLen += nc.Tp.Flen
 				}
+				// 获取原表字段char varchar总长度
 				for _, field := range table.Fields {
 					if nc.Name.Name.String() == field.Field {
 						reg_char := regexp.MustCompile(`.*?char\((\d+)\)`)
