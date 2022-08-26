@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -8016,6 +8017,50 @@ func (s *session) appendErrorNo(number ErrorCode, values ...interface{}) {
 	}
 }
 
+// 20220826 keyword关键字从配置文件加载
+func (s *session) ReadFile(filename string) string {
+	ex, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	// 获取当前路径
+	exPath := filepath.Dir(ex)
+	realPath, _ := filepath.EvalSymlinks(exPath)
+	// 获取配置文件绝对路径
+	configPath := filepath.Join(realPath, filename)
+
+	f, err := os.Open(configPath)
+	if err != nil {
+		fmt.Printf("read file [%s] fail, err:%v", configPath, err)
+		return ""
+	}
+	defer f.Close()
+
+	fd, err := ioutil.ReadAll(f)
+	if err != nil {
+		fmt.Println("read to fd fail", err)
+		return ""
+	}
+
+	return string(fd)
+}
+
+// 20220826 keyword关键字从配置文件加载
+func (s *session) contentToMap() map[string]bool {
+	filename := "config/keywords.conf" // 此处写死配置文件名
+	keyString := s.ReadFile(filename)
+	keyArr := strings.Split(strings.ReplaceAll(keyString, "\r\n", "\n"), "\n") // 处理\r\n或\n
+	var keywordsMap = map[string]bool{}
+	for _, item := range keyArr {
+		if len(item) > 0 { // 去除空行
+			if !strings.HasPrefix(item, "#") { // 去除注释行
+				keywordsMap[strings.TrimSpace(strings.ToLower(item))] = true // key去除前后空格并转小写
+			}
+		}
+	}
+	return keywordsMap
+}
+
 func (s *session) checkKeyWords(name string) {
 	if name != strings.ToUpper(name) {
 		s.appendErrorNo(ErrIdentifierUpper, name)
@@ -8025,9 +8070,13 @@ func (s *session) checkKeyWords(name string) {
 		s.appendErrorNo(ErrIdentifierLower, name)
 	}
 
+	// 20220826 keyword关键字从配置文件加载
+	keywordsMap := s.contentToMap()
+	name_ := strings.ToLower(name) // 匹配字符转为小写
 	if !regIdentified.MatchString(name) {
 		s.appendErrorNo(ER_INVALID_IDENT, name)
-	} else if _, ok := Keywords[strings.ToUpper(name)]; ok {
+		//} else if _, ok := Keywords[strings.ToUpper(name)]; ok {
+	} else if _, ok := keywordsMap[name_]; ok {
 		s.appendErrorNo(ER_IDENT_USE_KEYWORD, name)
 	}
 
