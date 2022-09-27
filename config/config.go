@@ -346,8 +346,10 @@ type Inc struct {
 
 	// 单个insert的values的个数, 仅判断insert values语法
 	MaxInsertRows uint `toml:"max_insert_rows" json:"max_insert_rows"`
-	// 单个表insert、update、delete 最大条数
+	// 单个表update、delete 最大条数
 	MaxDmlItems uint `toml:"max_dml_items" json:"max_dml_items"`
+	// 单个表insert最大条数
+	MaxInsertItems uint `toml:"max_insert_items" json:"max_insert_items"`
 
 	MaxKeys       uint `toml:"max_keys" json:"max_keys"`
 	MaxKeyParts   uint `toml:"max_key_parts" json:"max_key_parts"`
@@ -644,6 +646,7 @@ type IncLevel struct {
 	ER_INDEX_NAME_UNIQ_PREFIX       int8 `toml:"er_index_name_uniq_prefix"`
 	ER_INSERT_TOO_MUCH_ROWS         int8 `toml:"er_insert_too_much_rows"`
 	ER_DML_TOO_MUCH_ITEMS        int8 `toml:"er_dml_too_much_items"`
+	ER_INSERT_TOO_MUCH_ITEMS        int8 `toml:"er_insert_too_much_items"`
 	ER_INVALID_DATA_TYPE            int8 `toml:"er_invalid_data_type"`
 	ER_INVALID_IDENT                int8 `toml:"er_invalid_ident"`
 	ErrMariaDBRollbackWarn          int8 `toml:"er_mariadb_rollback_warn"`
@@ -868,6 +871,7 @@ var defaultConf = Config{
 		ER_INDEX_NAME_UNIQ_PREFIX:       1,
 		ER_INSERT_TOO_MUCH_ROWS:         1,
 		ER_DML_TOO_MUCH_ITEMS:           2,
+		ER_INSERT_TOO_MUCH_ITEMS:           2,
 		ER_INVALID_DATA_TYPE:            1,
 		ER_INVALID_IDENT:                1,
 		ErrMariaDBRollbackWarn:          1,

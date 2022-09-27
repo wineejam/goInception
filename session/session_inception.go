@@ -133,7 +133,20 @@ func (s *session) ExecuteInc(ctx context.Context, sql string) (recordSets []sqle
 
 func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqlexec.RecordSet, err error) {
 	sqlList := strings.Split(sql, "\n")
-	log.Debug("executeInc")
+	log.Debug("executeInc, SQL:", sql)
+	//20220927获取--check的值
+	checkFlag := true
+	if strings.Contains(sql, "--check") {
+		tmp := strings.Split(sql, ";")
+		chekcTmp := tmp[4]
+		log.Debug("checkTmp:", chekcTmp)
+		checkVal := strings.Split(chekcTmp, "=")[1]
+		if checkVal == "0" {
+			checkFlag = false
+		}
+	}
+	log.Debug("checkFlag:", checkFlag)
+
 	// tidb执行的SQL关闭general日志
 	logging := s.inc.GeneralLog
 
@@ -189,6 +202,7 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 	updateItems := map[string]int{}
 	deleteItems := map[string]int{}
 
+	log.Debug("sqllist length:", len(sqlList))
 	for i, sql_line := range sqlList {
 
 		// 100行解析一次
@@ -257,6 +271,7 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 
 				switch stmtNode.(type) {
 				case *ast.InceptionStartStmt:
+					log.Debug("InceptionStartStmt,s.haveBegin:", s.haveBegin)
 					if s.haveBegin {
 						s.appendErrorNo(ER_HAVE_BEGIN)
 
@@ -323,7 +338,7 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 					s.initDisableTypes()
 					continue
 				case *ast.InceptionCommitStmt:
-
+					log.Debug("InceptionCommitStmt,s.haveBegin:", s.haveBegin)
 					if !s.haveBegin {
 						s.appendErrorMessage("Must start as begin statement.")
 						if s.opt != nil && (s.opt.Print || s.opt.Masking) {
@@ -332,11 +347,11 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 							s.addNewSplitNode()
 							s.splitSets.Append("", strings.TrimSpace(s.myRecord.Buf.String()))
 						} else {
+							//log.Debug("InceptionCommitStmt,s.recordSets.Append,s.recordSets:", s.recordSets)
 							s.recordSets.Append(s.myRecord)
 						}
 						return s.makeResult()
 					}
-
 					s.haveCommit = true
 					s.executeCommit(ctx)
 					return s.makeResult()
@@ -384,8 +399,8 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 						if err := executor.ResetContextOfStmt(s, stmtNode); err != nil {
 							return nil, errors.Trace(err)
 						}
-						//log.Debug("111")
-						return s.processCommand(ctx, stmtNode, currentSql, insertItems, updateItems, deleteItems)
+						log.Debug("111")
+						return s.processCommand(ctx, stmtNode, currentSql, insertItems, updateItems, deleteItems, checkFlag)
 					}
 
 					var result []sqlexec.RecordSet
@@ -399,7 +414,7 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 						result, err = s.splitCommand(ctx, stmtNode, currentSql)
 					default:
 						//20220801
-						result, err = s.processCommand(ctx, stmtNode, currentSql, insertItems, updateItems, deleteItems)
+						result, err = s.processCommand(ctx, stmtNode, currentSql, insertItems, updateItems, deleteItems, checkFlag)
 						//log.Debug("processCommand result:", result, ",err:", err)
 					}
 					if err != nil {
@@ -560,20 +575,19 @@ func (s *session) needDataSource(stmtNode ast.StmtNode) bool {
 }
 
 func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
-	currentSql string, insertItems, updateItems, deleteItems map[string]int) ([]sqlexec.RecordSet, error) {
-	log.Debug("processCommand")
+	currentSql string, insertItems, updateItems, deleteItems map[string]int, checkFlag bool) ([]sqlexec.RecordSet, error) {
+	log.Debug("processCommand,checkFlag:", checkFlag)
 
 	s.checkAmbiguous = true
 	switch node := stmtNode.(type) {
 	case *ast.InsertStmt:
 		//20220801
 		//log.Debug("processCommand -- insertItems:", insertItems)
-		s.checkInsert(node, currentSql, insertItems)
+		s.checkInsert(node, currentSql, insertItems, checkFlag)
 	case *ast.DeleteStmt:
-		s.checkDelete(node, currentSql, deleteItems)
+		s.checkDelete(node, currentSql, deleteItems, checkFlag)
 	case *ast.UpdateStmt:
-		s.checkUpdate(node, currentSql, updateItems)
-
+		s.checkUpdate(node, currentSql, updateItems, checkFlag)
 	case *ast.UnionStmt:
 		for _, sel := range node.SelectList.Selects {
 			if sel.Fields != nil {
@@ -588,7 +602,6 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 		if s.opt.Execute {
 			s.appendErrorNo(ER_NOT_SUPPORTED_YET)
 		}
-
 	case *ast.SelectStmt:
 		if node.Fields != nil {
 			for _, field := range node.Fields.Fields {
@@ -601,35 +614,29 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 		if s.opt.Execute {
 			s.appendErrorNo(ER_NOT_SUPPORTED_YET)
 		}
-
 	case *ast.UseStmt:
 		s.checkChangeDB(node, currentSql)
-
 	case *ast.CreateDatabaseStmt:
 		s.checkCreateDB(node, currentSql)
 	case *ast.AlterDatabaseStmt:
 		s.checkAlterDB(node, currentSql)
 	case *ast.DropDatabaseStmt:
 		s.checkDropDB(node, currentSql)
-
 	case *ast.CreateTableStmt:
-		s.checkCreateTable(node, currentSql)
+		s.checkCreateTable(node, currentSql, checkFlag)
 	case *ast.AlterTableStmt:
-		s.checkAlterTable(node, currentSql)
+		s.checkAlterTable(node, currentSql, checkFlag)
 	case *ast.DropTableStmt:
 		s.checkDropTable(node, currentSql)
 	case *ast.RenameTableStmt:
 		s.checkRenameTable(node, currentSql)
 	case *ast.TruncateTableStmt:
 		s.checkTruncateTable(node, currentSql)
-
 	case *ast.CreateIndexStmt:
 		s.checkCreateIndex(node.Table, node.IndexName,
-			node.IndexColNames, node.IndexOption, nil, node.Unique, ast.ConstraintIndex)
-
+			node.IndexColNames, node.IndexOption, nil, node.Unique, ast.ConstraintIndex, checkFlag)
 	case *ast.DropIndexStmt:
 		s.checkDropIndex(node, currentSql)
-
 	case *ast.CreateViewStmt:
 		s.checkCreateView(node, currentSql)
 		// s.appendErrorMessage(fmt.Sprintf("命令禁止! 无法创建视图'%s'.", node.ViewName.Name))
@@ -697,7 +704,7 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 }
 
 func (s *session) executeCommit(ctx context.Context) {
-
+	log.Debug("executeCommit")
 	if s.opt.Check || s.opt.Print || s.opt.Masking || !s.opt.Execute || s.opt.split {
 		return
 	}
@@ -874,7 +881,7 @@ func (s *session) checkSqlIsDDL(record *Record) bool {
 }
 
 func (s *session) executeAllStatement(ctx context.Context) {
-
+	log.Debug("executeAllStatement")
 	tmp := s.processInfo.Load()
 	if tmp != nil {
 		pi := tmp.(util.ProcessInfo)
@@ -1197,7 +1204,7 @@ func (s *session) executeTransaction(records []*Record) int {
 }
 
 func (s *session) executeRemoteCommand(record *Record, isTran bool) int {
-
+	log.Debug("executeRemoteCommand")
 	s.myRecord = record
 	record.Stage = StageExec
 
@@ -1439,7 +1446,7 @@ func statisticsTableSQL() string {
 }
 
 func (s *session) executeRemoteStatement(record *Record, isTran bool) {
-	log.Debug("executeRemoteStatement")
+	log.Debug("executeRemoteStatement", ",record:", record, ",isTran:", isTran)
 
 	sqlStmt := record.Sql
 
@@ -1547,6 +1554,7 @@ func (s *session) executeRemoteStatement(record *Record, isTran bool) {
 }
 
 func (s *session) executeRemoteStatementAndBackup(record *Record) {
+	// insert,update,delete
 	log.Debug("executeRemoteStatementAndBackup")
 
 	if s.opt.Backup {
@@ -1559,11 +1567,11 @@ func (s *session) executeRemoteStatementAndBackup(record *Record) {
 		record.StartPosition = masterStatus.Position
 	}
 
-	if s.hasError() {
-		record.StageStatus = StatusExecFail
-		record.AffectedRows = 0
-		return
-	}
+	//if s.hasError() {
+	//	record.StageStatus = StatusExecFail
+	//	record.AffectedRows = 0
+	//	return
+	//}
 
 	s.executeRemoteStatement(record, false)
 
@@ -2513,7 +2521,7 @@ func Reverse(arr []string) []string {
 	return arr
 }
 
-func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
+func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string, checkFlag bool) {
 
 	log.Debug("checkCreateTable")
 
@@ -2550,6 +2558,11 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 
 		s.checkAutoIncrement(node)
 		s.checkContainDotColumn(node)
+
+		// 20220927跳过check check=false 不检查
+		if !checkFlag {
+			return
+		}
 
 		// 缓存表结构 CREATE TABLE LIKE
 		if node.ReferTable != nil {
@@ -2809,12 +2822,12 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 								[]*ast.IndexColName{
 									{Column: field.Name,
 										Length: types.UnspecifiedLength},
-								}, nil, table, true, ast.ConstraintPrimaryKey)
+								}, nil, table, true, ast.ConstraintPrimaryKey, checkFlag)
 						case ast.ColumnOptionUniqKey:
 							s.checkCreateIndex(nil, field.Name.String(),
 								[]*ast.IndexColName{
 									{Column: field.Name, Length: types.UnspecifiedLength},
-								}, nil, table, true, ast.ConstraintUniq)
+								}, nil, table, true, ast.ConstraintUniq, checkFlag)
 
 						}
 					}
@@ -2931,7 +2944,7 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 				}
 
 				s.checkCreateIndex(nil, ct.Name,
-					ct.Keys, ct.Option, table, false, ct.Tp)
+					ct.Keys, ct.Option, table, false, ct.Tp, checkFlag)
 
 				switch ct.Tp {
 				case ast.ConstraintKey, ast.ConstraintUniq,
@@ -3201,7 +3214,7 @@ func (s *session) buildPartitionInfo(def *ast.PartitionOptions,
 	return parts
 }
 
-func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
+func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string, checkFlag bool) {
 	log.Debug("checkAlterTable")
 
 	if node.Table.Schema.O == "" {
@@ -3221,6 +3234,12 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 
 	if table.AlterCount > 1 {
 		s.appendErrorNo(ER_ALTER_TABLE_ONCE, node.Table.Name.O)
+	}
+
+	s.myRecord.TableInfo = table
+	// 20220927跳过check check=false 不检查
+	if !checkFlag {
+		return
 	}
 
 	//20220706@ 获取原表信息
@@ -3605,7 +3624,7 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 		}
 	}
 
-	s.myRecord.TableInfo = table
+	//s.myRecord.TableInfo = table
 
 	if s.opt.Backup {
 		s.myRecord.DDLRollback += fmt.Sprintf("ALTER TABLE `%s`.`%s` ",
@@ -5170,7 +5189,7 @@ func (s *session) checkDropIndex(node *ast.DropIndexStmt, sql string) {
 
 func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 	IndexColNames []*ast.IndexColName, indexOption *ast.IndexOption,
-	t *TableInfo, unique bool, tp ast.ConstraintType) {
+	t *TableInfo, unique bool, tp ast.ConstraintType, checkFlag bool) {
 	log.Debug("checkCreateIndex")
 
 	if t == nil {
@@ -5182,6 +5201,10 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 
 	if s.myRecord.TableInfo == nil {
 		s.myRecord.TableInfo = t
+	}
+	// 20220927跳过check check=false 不检查
+	if !checkFlag {
+		return
 	}
 
 	s.mysqlShowTableStatus(t)
@@ -5527,14 +5550,14 @@ func (s *session) checkAddConstraint(t *TableInfo, c *ast.AlterTableSpec) {
 	case ast.ConstraintKey, ast.ConstraintIndex,
 		ast.ConstraintSpatial, ast.ConstraintFulltext:
 		s.checkCreateIndex(nil, c.Constraint.Name,
-			c.Constraint.Keys, c.Constraint.Option, t, false, c.Constraint.Tp)
+			c.Constraint.Keys, c.Constraint.Option, t, false, c.Constraint.Tp, true)
 	case ast.ConstraintUniq, ast.ConstraintUniqIndex, ast.ConstraintUniqKey:
 		s.checkCreateIndex(nil, c.Constraint.Name,
-			c.Constraint.Keys, c.Constraint.Option, t, true, c.Constraint.Tp)
+			c.Constraint.Keys, c.Constraint.Option, t, true, c.Constraint.Tp, true)
 
 	case ast.ConstraintPrimaryKey:
 		s.checkCreateIndex(nil, "PRIMARY",
-			c.Constraint.Keys, c.Constraint.Option, t, true, c.Constraint.Tp)
+			c.Constraint.Keys, c.Constraint.Option, t, true, c.Constraint.Tp, true)
 	case ast.ConstraintForeignKey:
 		s.checkCreateForeignKey(t, c.Constraint)
 	default:
@@ -5600,7 +5623,7 @@ func (s *session) checkDBExists(db string, reportNotExists bool) bool {
 	return true
 }
 
-func (s *session) checkInsert(node *ast.InsertStmt, sql string, insertItems map[string]int) {
+func (s *session) checkInsert(node *ast.InsertStmt, sql string, insertItems map[string]int, checkFlag bool) {
 
 	log.Debug("checkInsert")
 
@@ -5632,6 +5655,11 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string, insertItems map[
 	}
 
 	s.myRecord.TableInfo = table
+	// 20220927跳过check check=false 不检查
+	if !checkFlag {
+		return
+	}
+
 	fields := make([]FieldInfo, 0, fieldCount)
 	if fieldCount == 0 {
 		for _, field := range table.Fields {
@@ -5691,10 +5719,10 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string, insertItems map[
 		if find := strings.Contains(sql, tmpTableName); find {
 			insertItems[tmpTableName] += 1
 		}
-		if int(s.inc.MaxDmlItems) > 0 && insertItems[tmpTableName] > int(s.inc.MaxDmlItems) {
-			log.Debug("insert items exceed the limit.table:", tmpTableName)
-			//s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName, insertItems[tmpTableName], s.inc.MaxDmlItems)
-			s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName)
+		if int(s.inc.MaxDmlItems) > 0 && insertItems[tmpTableName] > int(s.inc.MaxInsertItems) { //20220927 insert最大5条，强制合并
+			log.Debug("insert need merge.", tmpTableName)
+			s.appendErrorNo(ER_INSERT_TOO_MUCH_ITEMS, tmpTableName)
+			return
 		}
 
 		//log.Debug("table_name:", tmpTableName, ",checkInsert insertItems:", insertItems, ",sql:", sql)
@@ -7306,7 +7334,7 @@ func (s *session) anlyzeExplain(rows []ExplainInfo) {
 	}
 }
 
-func (s *session) checkUpdate(node *ast.UpdateStmt, sql string, updateItems map[string]int) {
+func (s *session) checkUpdate(node *ast.UpdateStmt, sql string, updateItems map[string]int, checkFlag bool) {
 	log.Debug("checkUpdate")
 
 	// 从set列表读取要更新的表
@@ -7386,6 +7414,10 @@ func (s *session) checkUpdate(node *ast.UpdateStmt, sql string, updateItems map[
 				haveNewTable = true
 			}
 		}
+		// 20220927跳过check check=false 不检查
+		if !checkFlag {
+			return
+		}
 
 		// if i == len(tableList) - 1 && s.myRecord.TableInfo == nil {
 		// 	s.myRecord.TableInfo = t
@@ -7401,6 +7433,7 @@ func (s *session) checkUpdate(node *ast.UpdateStmt, sql string, updateItems map[
 			log.Debug("update items exceed the limit.table:", tmpTableName)
 			//s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName, updateItems[tmpTableName], s.inc.MaxDmlItems)
 			s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName)
+			return
 		}
 		log.Debug("table_name:", tmpTableName, ",updateItems:", updateItems, ",sql:", sql)
 	}
@@ -7744,7 +7777,7 @@ func (s *session) checkAggregateFuncItem(f *ast.AggregateFuncExpr, tables []*Tab
 	return false
 }
 
-func (s *session) checkDelete(node *ast.DeleteStmt, sql string, deleteItems map[string]int) {
+func (s *session) checkDelete(node *ast.DeleteStmt, sql string, deleteItems map[string]int, checkFlag bool) {
 	log.Debug("checkDelete")
 
 	// sqlId, ok := s.checkFingerprint(sql)
@@ -7811,6 +7844,11 @@ func (s *session) checkDelete(node *ast.DeleteStmt, sql string, deleteItems map[
 		}
 	}
 
+	// 20220927跳过check check=false 不检查
+	if !checkFlag {
+		return
+	}
+
 	log.Debug("tablname:", s.myRecord.TableInfo.Name)
 	// 20220801 增加单表限制最大delete条目
 	//t := getSingleTableName(node.Table)
@@ -7822,6 +7860,7 @@ func (s *session) checkDelete(node *ast.DeleteStmt, sql string, deleteItems map[
 		log.Debug("delete items exceed the limit.table:", tmpTableName)
 		//s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName, deleteItems[tmpTableName], s.inc.MaxDmlItems)
 		s.appendErrorNo(ER_DML_TOO_MUCH_ITEMS, tmpTableName)
+		return
 	}
 	log.Debug("table_name:", tmpTableName, ",deleteItems:", deleteItems, ",sql:", sql)
 
@@ -7986,6 +8025,7 @@ func (s *session) appendWarning(number ErrorCode, values ...interface{}) {
 }
 
 func (s *session) appendErrorNo(number ErrorCode, values ...interface{}) {
+	log.Debug("appendErrorNo")
 	r := s.myRecord
 
 	// 不检查时退出
@@ -7995,11 +8035,13 @@ func (s *session) appendErrorNo(number ErrorCode, values ...interface{}) {
 
 	var level uint8
 	if v, ok := s.incLevel[number.String()]; ok {
+		log.Debug("v:", v, ", ERROR NO:", number.String())
 		level = v
 	} else {
+		log.Debug("GetErrorLevel ERROR NO:", number.String())
 		level = GetErrorLevel(number)
 	}
-
+	log.Debug("incLevel:", level)
 	if level > 0 {
 		r.ErrLevel = uint8(Max(int(r.ErrLevel), int(level)))
 		s.recordSets.MaxLevel = uint8(Max(int(s.recordSets.MaxLevel), int(s.myRecord.ErrLevel)))

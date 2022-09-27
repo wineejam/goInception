@@ -45,7 +45,7 @@ func (s *session) processChanBackup(wg *sync.WaitGroup) {
 }
 
 func (s *session) runBackup(ctx context.Context) {
-
+	log.Debug("runBackup")
 	var wg sync.WaitGroup
 	wg.Add(1)
 	s.chBackupRecord = make(chan *chanBackup, 50)
@@ -58,7 +58,7 @@ func (s *session) runBackup(ctx context.Context) {
 	}()
 
 	for _, record := range s.recordSets.All() {
-
+		log.Debug("runBackup, record:", fmt.Sprintf("%+v", record), ",record.TableInfo:", record.TableInfo)
 		if s.checkSqlIsDML(record) || s.checkSqlIsDDL(record) {
 			s.myRecord = record
 
@@ -318,7 +318,7 @@ func (s *session) getRemoteBackupDBName(record *Record) string {
 // 如果备份表的表结构是旧表结构,即sql_statement字段类型为text,则返回false,否则返回true
 // longDataType 为true表示字段类型已更新,否则为text,需要在写入时自动截断
 func (s *session) mysqlCreateBackupTable(record *Record) (longDataType bool) {
-
+	log.Debug("mysqlCreateBackupTable")
 	if record.TableInfo == nil {
 		return
 	}
