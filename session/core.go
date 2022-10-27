@@ -375,7 +375,7 @@ func (s *session) audit(ctx context.Context, sql string) (err error) {
 					insertItems := map[string]int{}
 					updateItems := map[string]int{}
 					deleteItems := map[string]int{}
-					result, err = s.processCommand(ctx, stmtNode, currentSql, insertItems, updateItems, deleteItems, true)
+					result, err = s.processCommand(ctx, stmtNode, currentSql, insertItems, updateItems, deleteItems)
 				}
 				if err != nil {
 					return err

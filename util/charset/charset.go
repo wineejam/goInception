@@ -19,6 +19,7 @@ import (
 	"github.com/hanchuanchuan/goInception/mysql"
 	"github.com/hanchuanchuan/goInception/terror"
 	"github.com/pingcap/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -63,6 +64,7 @@ var charsetInfos = []*Charset{
 	{CharsetASCII, CollationASCII, make(map[string]*Collation), "US ASCII", 1},
 	{CharsetLatin1, CollationLatin1, make(map[string]*Collation), "Latin1", 1},
 	{CharsetBin, CollationBin, make(map[string]*Collation), "binary", 1},
+	{CharsetUTF8MB3, CollationUTF8MB3, make(map[string]*Collation), "UTF-8 Unicode", 3},
 	{"gbk", "gbk_chinese_ci", make(map[string]*Collation), "GBK", 3},
 	{"gb2312", "gb2312_chinese_ci", make(map[string]*Collation), "GB2312", 3},
 	{"gb18030", "gb18030_chinese_ci", make(map[string]*Collation), "GB18030", 3},
@@ -71,6 +73,7 @@ var charsetInfos = []*Charset{
 // All the names supported collations should be in the following table.
 var supportedCollationNames = map[string]struct{}{
 	CollationUTF8:    {},
+	CollationUTF8MB3: {},
 	CollationUTF8MB4: {},
 	CollationASCII:   {},
 	CollationLatin1:  {},
@@ -132,6 +135,7 @@ func ValidCharsetAndCollation(cs string, co string) bool {
 
 // GetDefaultCollation returns the default collation for charset.
 func GetDefaultCollation(charset string) (string, error) {
+	log.Debug("charset.go -> GetDefaultCollation")
 	charset = strings.ToLower(charset)
 	if charset == CharsetBin {
 		return CollationBin, nil
@@ -150,6 +154,7 @@ func GetDefaultCharsetAndCollate() (string, string) {
 
 // GetCharsetInfo returns charset and collation for cs as name.
 func GetCharsetInfo(cs string) (string, string, error) {
+	log.Debug("charset.go -> GetCharsetInfo")
 	c, ok := charsets[strings.ToLower(cs)]
 	if !ok {
 		return "", "", errors.Errorf("Unknown charset %s", cs)
@@ -159,9 +164,12 @@ func GetCharsetInfo(cs string) (string, string, error) {
 
 // GetCharsetDesc gets charset descriptions in the local charsets.
 func GetCharsetDesc(cs string) (*Desc, error) {
+	log.Debug("charset.go -> GetCharsetDesc")
 	switch strings.ToLower(cs) {
 	case CharsetUTF8:
 		return descs[0], nil
+	case CharsetUTF8MB3:
+		return descs[5], nil
 	case CharsetUTF8MB4:
 		return descs[1], nil
 	case CharsetASCII:
@@ -172,6 +180,7 @@ func GetCharsetDesc(cs string) (*Desc, error) {
 		return descs[4], nil
 	default:
 		return nil, errors.Errorf("Unknown charset %s", cs)
+		//return descs[1], nil
 	}
 }
 
@@ -205,9 +214,11 @@ const (
 	// CollationBin is the default collation for CharsetBin.
 	CollationBin = "binary"
 	// CharsetUTF8 is the default charset for string types.
-	CharsetUTF8 = "utf8"
+	CharsetUTF8    = "utf8"
+	CharsetUTF8MB3 = "utf8mb3"
 	// CollationUTF8 is the default collation for CharsetUTF8.
-	CollationUTF8 = "utf8_bin"
+	CollationUTF8    = "utf8_bin"
+	CollationUTF8MB3 = "utf8mb3_bin"
 	// CharsetUTF8MB4 represents 4 bytes utf8, which works the same way as utf8 in Go.
 	CharsetUTF8MB4 = "utf8mb4"
 	// CollationUTF8MB4 is the default collation for CharsetUTF8MB4.

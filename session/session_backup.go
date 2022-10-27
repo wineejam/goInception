@@ -58,11 +58,12 @@ func (s *session) runBackup(ctx context.Context) {
 	}()
 
 	for _, record := range s.recordSets.All() {
-		log.Debug("runBackup, record:", fmt.Sprintf("%+v", record), ",record.TableInfo:", record.TableInfo)
+		//log.Debug("runBackup, record:", fmt.Sprintf("%+v", record), ",record.TableInfo:", record.TableInfo)
 		if s.checkSqlIsDML(record) || s.checkSqlIsDDL(record) {
 			s.myRecord = record
 
 			longDataType := s.mysqlCreateBackupTable(record)
+			log.Debug("longDataType:", longDataType)
 			// errno := s.mysqlCreateBackupTable(record)
 			// if errno == 2 {
 			// 	break
@@ -131,6 +132,7 @@ func (s *session) flushBackupRecord(dbname string, record *Record) {
 }
 
 func (s *session) mysqlExecuteBackupSqlForDDL(record *Record) {
+	log.Debug("mysqlExecuteBackupSqlForDDL  record.DDLRollback:", record.DDLRollback)
 	if record.DDLRollback == "" {
 		return
 	}
@@ -162,7 +164,7 @@ func (s *session) mysqlExecuteBackupSqlForDDL(record *Record) {
 // mysqlExecuteBackupInfoInsertSql 写入备份记录表
 // longDataType 为true表示字段类型已更新,否则为text,需要在写入时自动截断
 func (s *session) mysqlExecuteBackupInfoInsertSql(record *Record, longDataType bool) int {
-
+	log.Debug("mysqlExecuteBackupInfoInsertSql")
 	record.OPID = makeOPIDByTime(record.ExecTimestamp, record.ThreadId, record.SeqNo)
 
 	typeStr := "UNKNOWN"
@@ -264,7 +266,7 @@ func (s *session) mysqlCreateSqlBackupTable(dbname string) string {
 	buf.WriteString("start_binlog_pos int,")
 	buf.WriteString("end_binlog_file varchar(512),")
 	buf.WriteString("end_binlog_pos int,")
-	buf.WriteString("sql_statement mediumtext,")
+	buf.WriteString("sql_statement longtext,")
 	buf.WriteString("host VARCHAR(64),")
 	buf.WriteString("dbname VARCHAR(64),")
 	buf.WriteString("tablename VARCHAR(64),")

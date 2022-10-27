@@ -136,6 +136,9 @@ func (h *StmtHistory) Count() int {
 }
 
 type session struct {
+	//20220929 forceExecFlag
+	forceExecFlag bool
+
 	// processInfo is used by ShowProcess(), and should be modified atomically.
 	processInfo atomic.Value
 	txn         TxnState
