@@ -359,6 +359,9 @@ type Inc struct {
 	MaxPrimaryKeyParts uint `toml:"max_primary_key_parts" json:"max_primary_key_parts"` // 主键最多允许有几列组合
 	MergeAlterTable    bool `toml:"merge_alter_table" json:"merge_alter_table"`
 
+	//20221110 指定普通索引个数最小值 0表示关闭,1表示至少需要一个普通索引 -主键不算-
+	MinNormalIndexNum uint `toml:"min_normal_index_num" json:"min_normal_index_num"`
+
 	// 建表必须创建的列. 可指定多个列,以逗号分隔.列类型可选. 格式: 列名 [列类型,可选],...
 	MustHaveColumns string `toml:"must_have_columns" json:"must_have_columns"`
 	// 如果表包含以下列，列必须有索引。可指定多个列,以逗号分隔.列类型可选.   格式: 列名 [列类型,可选],...
@@ -623,34 +626,35 @@ type Ghost struct {
 }
 
 type IncLevel struct {
-	ER_ALTER_TABLE_ONCE       int8 `toml:"er_alter_table_once"`
-	ER_AUTO_INCR_ID_WARNING   int8 `toml:"er_auto_incr_id_warning"`
-	ER_AUTOINC_UNSIGNED       int8 `toml:"er_autoinc_unsigned"`
-	ER_BLOB_CANT_HAVE_DEFAULT int8 `toml:"er_blob_cant_have_default"`
-	ER_CANT_SET_CHARSET       int8 `toml:"er_cant_set_charset"`
-	ER_CANT_SET_COLLATION     int8 `toml:"er_cant_set_collation"`
-	ER_CANT_SET_ENGINE        int8 `toml:"er_cant_set_engine"`
-	ER_CHANGE_COLUMN_TYPE     int8 `toml:"er_change_column_type"`
-	ER_CHANGE_TOO_MUCH_ROWS   int8 `toml:"er_change_too_much_rows"`
-	ER_CHAR_TO_VARCHAR_LEN    int8 `toml:"er_char_to_varchar_len"`
-	ER_CHARSET_ON_COLUMN      int8 `toml:"er_charset_on_column"`
-	ER_COLUMN_HAVE_NO_COMMENT int8 `toml:"er_column_have_no_comment"`
-	ER_DATETIME_DEFAULT       int8 `toml:"er_datetime_default"`
-	ER_DATETIME_TIMESTAMP_NOTNULL       int8 `toml:"er_datetime_timestamp_notnull"`
-	ErrFloatDoubleToDecimal   int8 `toml:"er_float_double_to_decimal"`
-	ER_FOREIGN_KEY            int8 `toml:"er_foreign_key"`
-	ER_IDENT_USE_KEYWORD      int8 `toml:"er_ident_use_keyword"`
-	ER_INC_INIT_ERR           int8 `toml:"er_inc_init_err"`
+	ER_ALTER_TABLE_ONCE           int8 `toml:"er_alter_table_once"`
+	ER_AUTO_INCR_ID_WARNING       int8 `toml:"er_auto_incr_id_warning"`
+	ER_AUTOINC_UNSIGNED           int8 `toml:"er_autoinc_unsigned"`
+	ER_BLOB_CANT_HAVE_DEFAULT     int8 `toml:"er_blob_cant_have_default"`
+	ER_CANT_SET_CHARSET           int8 `toml:"er_cant_set_charset"`
+	ER_CANT_SET_COLLATION         int8 `toml:"er_cant_set_collation"`
+	ER_CANT_SET_ENGINE            int8 `toml:"er_cant_set_engine"`
+	ER_CHANGE_COLUMN_TYPE         int8 `toml:"er_change_column_type"`
+	ER_CHANGE_TOO_MUCH_ROWS       int8 `toml:"er_change_too_much_rows"`
+	ER_CHAR_TO_VARCHAR_LEN        int8 `toml:"er_char_to_varchar_len"`
+	ER_CHARSET_ON_COLUMN          int8 `toml:"er_charset_on_column"`
+	ER_COLUMN_HAVE_NO_COMMENT     int8 `toml:"er_column_have_no_comment"`
+	ER_DATETIME_DEFAULT           int8 `toml:"er_datetime_default"`
+	ER_DATETIME_TIMESTAMP_NOTNULL int8 `toml:"er_datetime_timestamp_notnull"`
+	ErrFloatDoubleToDecimal       int8 `toml:"er_float_double_to_decimal"`
+	ER_FOREIGN_KEY                int8 `toml:"er_foreign_key"`
+	ER_IDENT_USE_KEYWORD          int8 `toml:"er_ident_use_keyword"`
+	ER_INC_INIT_ERR               int8 `toml:"er_inc_init_err"`
 
 	ER_INDEX_NAME_IDX_PREFIX        int8 `toml:"er_index_name_idx_prefix"`
 	ER_INDEX_NAME_UNIQ_PREFIX       int8 `toml:"er_index_name_uniq_prefix"`
 	ER_INSERT_TOO_MUCH_ROWS         int8 `toml:"er_insert_too_much_rows"`
-	ER_DML_TOO_MUCH_ITEMS        int8 `toml:"er_dml_too_much_items"`
+	ER_DML_TOO_MUCH_ITEMS           int8 `toml:"er_dml_too_much_items"`
 	ER_INSERT_TOO_MUCH_ITEMS        int8 `toml:"er_insert_too_much_items"`
 	ER_INVALID_DATA_TYPE            int8 `toml:"er_invalid_data_type"`
 	ER_INVALID_IDENT                int8 `toml:"er_invalid_ident"`
 	ErrMariaDBRollbackWarn          int8 `toml:"er_mariadb_rollback_warn"`
 	ER_MUST_HAVE_COLUMNS            int8 `toml:"er_must_have_columns"`
+	ErrMinNormalIndexNum            int8 `toml:"er_min_normal_index_num"`
 	ErrColumnsMustHaveIndex         int8 `toml:"er_columns_must_have_index"`
 	ErrColumnsMustHaveIndexTypeErr  int8 `toml:"er_columns_must_have_index_type_err"`
 	ER_NO_WHERE_CONDITION           int8 `toml:"er_no_where_condition"`
@@ -871,11 +875,12 @@ var defaultConf = Config{
 		ER_INDEX_NAME_UNIQ_PREFIX:       1,
 		ER_INSERT_TOO_MUCH_ROWS:         1,
 		ER_DML_TOO_MUCH_ITEMS:           2,
-		ER_INSERT_TOO_MUCH_ITEMS:           2,
+		ER_INSERT_TOO_MUCH_ITEMS:        2,
 		ER_INVALID_DATA_TYPE:            1,
 		ER_INVALID_IDENT:                1,
 		ErrMariaDBRollbackWarn:          1,
 		ER_MUST_HAVE_COLUMNS:            1,
+		ErrMinNormalIndexNum:            1,
 		ErrColumnsMustHaveIndex:         1,
 		ErrColumnsMustHaveIndexTypeErr:  1,
 		ER_NO_WHERE_CONDITION:           1,

@@ -181,6 +181,7 @@ const (
 	ER_MUST_AT_LEAST_ONE_COLUMN
 	ER_MUST_HAVE_COLUMNS
 	ErrColumnsMustHaveIndex
+	ErrMinNormalIndexNum
 	ErrColumnsMustHaveIndexTypeErr
 	ER_PRIMARY_CANT_HAVE_NULL
 	ErrCantRemoveAllFields
@@ -270,7 +271,7 @@ var ErrorsDefault = map[ErrorCode]string{
 	ER_UDPATE_TOO_MUCH_ROWS:                "Update(%d rows) more than %d rows.",
 	ER_INSERT_TOO_MUCH_ROWS:                "Insert(%d rows) more than %d rows.",
 	ER_DML_TOO_MUCH_ITEMS:                  "Update/Delete(%d rows) more than %d items.",
-	ER_INSERT_TOO_MUCH_ITEMS:                "Insert(%d rows) more than %d items.",
+	ER_INSERT_TOO_MUCH_ITEMS:               "Insert(%d rows) more than %d items.",
 	ER_CHANGE_TOO_MUCH_ROWS:                "%s(%d rows) more than %d rows.",
 	ER_WRONG_NAME_FOR_INDEX:                "Incorrect index name '%s' in table '%s'.",
 	ER_TOO_MANY_KEYS:                       "Too many keys specified in table '%s', max %d keys allowed.",
@@ -371,6 +372,7 @@ var ErrorsDefault = map[ErrorCode]string{
 	ER_MUST_AT_LEAST_ONE_COLUMN:            "A table must have at least 1 column.",
 	ER_MUST_HAVE_COLUMNS:                   "Must have the specified column(column must not null): '%s'.",
 	ErrColumnsMustHaveIndex:                "The specified column: '%s' must have index.",
+	ErrMinNormalIndexNum:                   "must have '%s' index(s).",
 	ErrColumnsMustHaveIndexTypeErr:         "The specified column: '%s' type must be '%s',current is '%s'.",
 	ER_PRIMARY_CANT_HAVE_NULL:              "All parts of a PRIMARY KEY must be NOT NULL; if you need NULL in a key, use UNIQUE instead",
 	ErrCantRemoveAllFields:                 "You can't delete all columns with ALTER TABLE; use DROP TABLE instead",
@@ -460,7 +462,7 @@ var ErrorsChinese = map[ErrorCode]string{
 	ER_UDPATE_TOO_MUCH_ROWS:             "预计一次更新(%d行)超过 %d 行.",
 	ER_INSERT_TOO_MUCH_ROWS:             "单条insert values过多.(%d)超过 %d .",
 	ER_DML_TOO_MUCH_ITEMS:               "(表 '%s')update/delete次数过多.请合并对应语句",
-	ER_INSERT_TOO_MUCH_ITEMS:              "(表 '%s')请合并insert语句为 insert values(),()...",
+	ER_INSERT_TOO_MUCH_ITEMS:            "(表 '%s')请合并insert语句为 insert values(),()...",
 	ER_CHANGE_TOO_MUCH_ROWS:             "预计影响行数(%d行)超过 %d 行.",
 	ER_WRONG_NAME_FOR_INDEX:             "索引 '%s' 名称不正确(表 '%s').",
 	ER_TOO_MANY_KEYS:                    "表 '%s' 指定了太多索引, 最多允许 %d 个.",
@@ -561,6 +563,7 @@ var ErrorsChinese = map[ErrorCode]string{
 	ER_MUST_AT_LEAST_ONE_COLUMN:            "表至少需要有一个列.",
 	ER_MUST_HAVE_COLUMNS:                   "表必须包含以下列: '%s',且属性需要设置为 NOT NULL",
 	ErrColumnsMustHaveIndex:                "列: '%s' 必须建索引.",
+	ErrMinNormalIndexNum:                   "表至少需要 '%s' 个普通索引（不包含主键索引）.",
 	ErrColumnsMustHaveIndexTypeErr:         "列: '%s' 类型必须为 '%s',当前为 '%s'",
 	ER_PRIMARY_CANT_HAVE_NULL:              "主键的所有列必须为NOT NULL,如需要NULL列,请改用唯一索引",
 	ErrCantRemoveAllFields:                 "禁止删除表的所有列.",
@@ -627,6 +630,7 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ER_INVALID_IDENT,
 		ER_MUST_HAVE_COLUMNS,
 		ErrColumnsMustHaveIndex,
+		ErrMinNormalIndexNum,
 		ErrColumnsMustHaveIndexTypeErr,
 		ER_NO_WHERE_CONDITION,
 		ErrJoinNoOnCondition,
@@ -1059,6 +1063,8 @@ func (e ErrorCode) String() string {
 		return "er_must_have_columns"
 	case ErrColumnsMustHaveIndex:
 		return "er_columns_must_have_index"
+	case ErrMinNormalIndexNum:
+		return "er_min_normal_index_num"
 	case ErrColumnsMustHaveIndexTypeErr:
 		return "er_columns_must_have_index_type_err"
 	case ER_PRIMARY_CANT_HAVE_NULL:

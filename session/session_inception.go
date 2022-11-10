@@ -2979,7 +2979,10 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 
 	if !s.hasError() && s.inc.ColumnsMustHaveIndex != "" {
 		s.checkColumnsMustHaveindex(table)
+		log.Debug("create table: checkColumnsMustHaveindex")
 	}
+	// 202211.10 检查索引个数
+	s.checkCreateTableNormalIndex(table)
 
 	if !s.hasError() && s.opt.Execute {
 		s.myRecord.DDLRollback = fmt.Sprintf("DROP TABLE `%s`.`%s`;", table.Schema, table.Name)
@@ -3069,8 +3072,36 @@ func (s *session) checkMustHaveColumns(table *TableInfo) {
 		s.appendErrorNo(ER_MUST_HAVE_COLUMNS, strings.Join(notFountColumns, ","))
 	}
 }
+func (s *session) checkCreateTableNormalIndex(table *TableInfo) {
+	log.Debug("checkCreateTableNormalIndex")
+	if table == nil {
+		return
+	}
+	if s.inc.MinNormalIndexNum == 0 { // 配置为0不检查
+		return
+	}
+	var normalIndexArr []string
+	for _, indexColName := range table.Indexes {
+		if indexColName.IndexName != "PRIMARY" { //排除主键
+			log.Debug("index info, colName:", indexColName.ColumnName, ",seq:", indexColName.Seq,
+				",type:", indexColName.IndexType, ",NonUnique:", indexColName.NonUnique,
+				",Table:", indexColName.Table, ",IndexName:", indexColName.IndexName,
+			)
+			normalIndexArr = append(normalIndexArr, indexColName.ColumnName+"|"+indexColName.IndexName)
+		}
+	}
+	var normalIndexNum uint
+	normalIndexNum = uint(len(normalIndexArr))
+	log.Debug("normalIndexArr:", normalIndexArr, ",num:", normalIndexNum)
+	if normalIndexNum < s.inc.MinNormalIndexNum {
+		// 需要使用 strconv.Itoa 转换成string
+		s.appendErrorNo(ErrMinNormalIndexNum, strconv.Itoa(int(s.inc.MinNormalIndexNum)))
+	}
+
+}
 
 func (s *session) checkColumnsMustHaveindex(table *TableInfo) {
+	log.Debug("checkColumnsMustHaveindex")
 	columns := strings.Split(s.inc.ColumnsMustHaveIndex, ",")
 	if len(columns) == 0 {
 		return
