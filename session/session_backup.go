@@ -274,8 +274,8 @@ func (s *session) mysqlCreateSqlBackupTable(dbname string) string {
 	buf.WriteString("time TIMESTAMP,")
 	buf.WriteString("type VARCHAR(20),")
 	buf.WriteString("PRIMARY KEY(opid_time)")
-
-	buf.WriteString(")ENGINE INNODB DEFAULT CHARSET UTF8MB4;")
+	//20230417需求：备份表开启压缩
+	buf.WriteString(")ENGINE INNODB row_format compressed DEFAULT CHARSET UTF8MB4;")
 
 	return buf.String()
 }
@@ -289,8 +289,8 @@ func (s *session) mysqlCreateSqlFromTableInfo(dbname string, ti *TableInfo) stri
 	buf.WriteString("rollback_statement longtext, ")
 	buf.WriteString("opid_time varchar(50),")
 	buf.WriteString("KEY `idx_opid_time` (`opid_time`)")
-
-	buf.WriteString(") ENGINE INNODB DEFAULT CHARSET UTF8MB4;")
+	//20230417需求：备份表开启压缩
+	buf.WriteString(") ENGINE INNODB row_format compressed  DEFAULT CHARSET UTF8MB4;")
 
 	return buf.String()
 }
@@ -359,6 +359,7 @@ func (s *session) mysqlCreateBackupTable(record *Record) (longDataType bool) {
 	key := fmt.Sprintf("%s.%s", backupDBName, record.TableInfo.Name)
 	if _, ok := s.backupTableCacheList[key]; !ok {
 		createSql := s.mysqlCreateSqlFromTableInfo(backupDBName, record.TableInfo)
+		log.Debugln("bakCreateSql:%s", createSql)
 		if err := s.backupdb.Exec(createSql).Error; err != nil {
 			log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
 			if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
@@ -377,6 +378,7 @@ func (s *session) mysqlCreateBackupTable(record *Record) (longDataType bool) {
 	key = fmt.Sprintf("%s.%s", backupDBName, remoteBackupTable)
 	if _, ok := s.backupTableCacheList[key]; !ok {
 		createSql := s.mysqlCreateSqlBackupTable(backupDBName)
+		log.Debugln("bakCreateSql:%s", createSql)
 		if err := s.backupdb.Exec(createSql).Error; err != nil {
 			if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
 				if myErr.Number != 1050 { /*ER_TABLE_EXISTS_ERROR*/

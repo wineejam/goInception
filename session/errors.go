@@ -26,7 +26,7 @@ import (
 	"github.com/hanchuanchuan/goInception/terror"
 )
 
-//go:generate stringer -type=ErrorCode
+//go:generate stringer -type=ErDDL语句禁止使用 arorCode
 type ErrorCode int
 
 var (
@@ -372,7 +372,7 @@ var ErrorsDefault = map[ErrorCode]string{
 	ER_MUST_AT_LEAST_ONE_COLUMN:            "A table must have at least 1 column.",
 	ER_MUST_HAVE_COLUMNS:                   "Must have the specified column(column must not null): '%s'.",
 	ErrColumnsMustHaveIndex:                "The specified column: '%s' must have index.",
-	ErrMinNormalIndexNum:                   "must have '%s' index(s).",
+	ErrMinNormalIndexNum:                   "The Table must have '%s' general index(s). Contains no primary key index",
 	ErrColumnsMustHaveIndexTypeErr:         "The specified column: '%s' type must be '%s',current is '%s'.",
 	ER_PRIMARY_CANT_HAVE_NULL:              "All parts of a PRIMARY KEY must be NOT NULL; if you need NULL in a key, use UNIQUE instead",
 	ErrCantRemoveAllFields:                 "You can't delete all columns with ALTER TABLE; use DROP TABLE instead",
@@ -554,7 +554,7 @@ var ErrorsChinese = map[ErrorCode]string{
 	ER_PK_TOO_MANY_PARTS:                   "表 '%s'.'%s' 主键指定了太多的字段, 最多允许 %d 个字段",
 	ER_REMOVED_SPACES:                      "Leading spaces are removed from name '%s'",
 	ER_CHANGE_COLUMN_TYPE:                  "类型转换警告: 列 '%s' %s -> %s.",
-	ER_CANT_DROP_TABLE:                     "禁用【DROP】|【TRUNCATE】删除/清空表 '%s', 请改用RENAME重写.",
+	ER_CANT_DROP_TABLE:                     "禁用【DROP】|【TRUNCATE】删除/清空表 '%s', 请改用请改用rename table_a to table_b，然后create table_a (.... )方式处理。\ntable_b表名需要明确注明是废弃表，例如：_drop_日期后缀等。\n不能使用_copy|_bk|_bak等后缀避免临时需求歧义",
 	ER_CANT_DROP_DATABASE:                  "命令禁止! 无法删除数据库'%s'.",
 	ER_WRONG_TABLE_NAME:                    "不正确的表名: '%-.100s'",
 	ER_CANT_SET_CHARSET:                    "禁止指定字符集: '%s'",
@@ -577,10 +577,10 @@ var ErrorsChinese = map[ErrorCode]string{
 	ErrEngineNotSupport:                    "允许的存储引擎: '%s'.",
 	ErrWrongUsage:                          "%s子句无法使用%s",
 	ErrJsonTypeSupport:                     "不允许使用json类型(列'%s').",
-	ErCantChangeColumnPosition:             "不允许改变列顺序(列'%s').",
+	ErCantChangeColumnPosition:             "不允许改变列顺序（DDL语句禁止使用 alter table '%s' after '字段B' ）",
 	ErCantChangeColumn:                     "不允许change column语法(列'%s').",
 	ER_DATETIME_DEFAULT:                    "请设置 datetime 列 '%s' 的默认值.",
-	ER_DATETIME_TIMESTAMP_NOTNULL:          "列 '%s' (datetime/timestamp)属性需要设置为NOT NULL",
+	ER_DATETIME_TIMESTAMP_NOTNULL:          "列 '%s' 需要设置为 datetime 类型，建议not null属性",
 	ER_TOO_MUCH_AUTO_DATETIME_COLS:         "表定义不正确,只能有一个 datetime 字段,在 DEFAULT 或 ON UPDATE指定CURRENT_TIMESTAMP.",
 	ErrFloatDoubleToDecimal:                "列 '%s' 建议设置为 decimal 类型.",
 	ErrIdentifierUpper:                     "标识符 '%s' 必须大写.",
